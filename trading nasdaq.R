@@ -106,5 +106,42 @@ ggplot(bottom_5_latest_price, aes(x = reorder(Stock_Symbol, latest_close), y = l
   coord_flip() +
   labs(title = "Bottom 5 Stocks by Lowest Latest Price", x = "Stock Symbol", y = "Closing Price") +
   theme_minimal()
-
-
+install.packages("e1071")
+library(e1071)
+stock_metrics <- all_data %>%
+  group_by(Stock_Symbol) %>%
+  summarise(
+    skewness = skewness(Close, na.rm = TRUE),
+    kurtosis = kurtosis(Close, na.rm = TRUE),
+    .groups = 'drop'
+  )
+head(stock_metrics)
+ggplot(stock_metrics, aes(x = Stock_Symbol, y = skewness)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+  labs(title = "Skewness of Closing Prices by Stock", x = "Stock Symbol", y = "Skewness")
+ggplot(stock_metrics, aes(x = Stock_Symbol, y = kurtosis)) +
+  geom_bar(stat = "identity", fill = "lightgreen") +
+  coord_flip() +
+  labs(title = "Kurtosis of Closing Prices by Stock", x = "Stock Symbol", y = "Kurtosis")
+top_5_kurtosis <- stock_metrics %>%
+  arrange(desc(kurtosis)) %>%
+  slice(1:5)
+print("Top 5 Stocks by Kurtosis:")
+print(top_5_kurtosis)
+top_5_skewness <- stock_metrics %>%
+  arrange(desc(skewness)) %>%
+  slice(1:5)
+print(top_5_skewness)
+stock_data <- all_data %>%
+  mutate(Date = as.Date(Date),
+         Close = as.numeric(Close))
+stock_data <- all_data %>%
+  group_by(Stock_Symbol) %>%
+  arrange(Date) %>%
+  mutate(Growth_Percentage = ((Close - lag(Close)) / lag(Close)) * 100)
+latest_growth <- all_data %>%
+  group_by(Stock_Symbol) %>%
+  filter(Date == max(Date)) %>%
+  arrange(desc(Growth_Percentage)) %>%
+  select(Stock_Symbol, Growth_Percentage, Close)
