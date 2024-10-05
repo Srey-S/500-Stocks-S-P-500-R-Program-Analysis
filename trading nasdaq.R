@@ -133,15 +133,82 @@ top_5_skewness <- stock_metrics %>%
   arrange(desc(skewness)) %>%
   slice(1:5)
 print(top_5_skewness)
-stock_data <- all_data %>%
-  mutate(Date = as.Date(Date),
-         Close = as.numeric(Close))
-stock_data <- all_data %>%
+
+summary_stats <- all_data %>%
+  group_by(Stock_Symbol) %>%
+  summarise(
+    mean_close = mean(Close, na.rm = TRUE),
+    median_close = median(Close, na.rm = TRUE),
+    sd_close = sd(Close, na.rm = TRUE),
+    mean_volume = mean(Volume, na.rm = TRUE)
+  )
+all_data <- all_data %>%
   group_by(Stock_Symbol) %>%
   arrange(Date) %>%
-  mutate(Growth_Percentage = ((Close - lag(Close)) / lag(Close)) * 100)
-latest_growth <- all_data %>%
+  mutate(Daily_Return = (Close - lag(Close)) / lag(Close) * 100)
+head(all_data)
+head(summary_stats)
+dim(all_data)
+#all_data_filtered <- all_data %>%
+ # filter(Stock_Symbol %in% c("AAPL", "MSFT", "GOOGL") & Date >= "2020-01-01")
+#volatility_data <- all_data_filtered %>%
+ # group_by(Stock_Symbol) %>%
+  #summarise(volatility = sd(Daily_Return, na.rm = TRUE))
+#Due to large memory access and exceeding time limit for character search
+#this function is not functional.
+
+library(zoo)
+
+all_data <- all_data %>%
   group_by(Stock_Symbol) %>%
-  filter(Date == max(Date)) %>%
-  arrange(desc(Growth_Percentage)) %>%
-  select(Stock_Symbol, Growth_Percentage, Close)
+  arrange(Date) %>%
+  mutate(Rolling_Avg_30 = rollmean(Close, k = 30, fill = NA, align = "right"),
+         Rolling_Volatility_30 = rollapply(Daily_Return, width = 30, FUN = sd, fill = NA, align = "right"))
+
+# Check the head of the modified data
+head(all_data)
+ggplot(all_data %>% filter(Stock_Symbol %in% c("AAPL", "MSFT", "GOOGL","HON")), 
+       aes(x = Date, y = Rolling_Avg_30, color = Stock_Symbol)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "30-Day Rolling Average of Stock Prices", x = "Date", y = "30-Day Average Closing Price")
+ggplot(all_data %>% filter(Stock_Symbol %in% c("AAPL", "MSFT", "GOOGL","HON")), 
+       aes(x = Date, y = Rolling_Volatility_30, color = Stock_Symbol)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "30-Day Rolling Volatility of Stock Returns", x = "Date", y = "30-Day Volatility")
+
+# Create pivot data for daily returns
+pivot_returns <- all_data %>%
+  select(Date, Stock_Symbol, Daily_Return) %>%
+  pivot_wider(names_from = Stock_Symbol, values_from = Daily_Return)
+
+# Calculate the correlation matrix of daily returns
+cor_returns_matrix <- cor(pivot_returns %>% select(-Date), use = "complete.obs")
+print(cor_returns_matrix)
+install.packages("ggcorrplot")
+
+# Convert the correlation matrix to a long format (ignoring diagonal values)
+cor_long <- as.data.frame(as.table(cor_matrix)) %>%
+  filter(Var1 != Var2) %>%  # Exclude the diagonal (self correlations)
+  mutate(pair = pmap_chr(list(Var1, Var2), ~paste(sort(c(..1, ..2)), collapse = "-"))) %>%
+  distinct(pair, .keep_all = TRUE) %>%  # Keep unique pairs
+  arrange(desc(Freq))  # Sort by correlation values
+
+# Extract top 5 and bottom 5 correlations
+top_5_correlations <- cor_long %>%
+  slice(1:5)
+
+bottom_5_correlations <- cor_long %>%
+  arrange(Freq) %>%
+  slice(1:5)
+
+# Combine top and bottom correlations into one dataset
+top_bottom_correlations <- bind_rows(
+  top_5_correlations %>% mutate(type = "Top 5 Correlations"),
+  bottom_5_correlations %>% mutate(type = "Bottom 5 Correlations")
+)
+
+# Check the data
+print(top_bottom_correlations)
+
